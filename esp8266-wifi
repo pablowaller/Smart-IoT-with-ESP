@@ -1,15 +1,12 @@
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
 
-// Configuración de Wi-Fi
-const char* ssid = "Luna 2.4"; // Nombre de tu red Wi-Fi
-const char* password = "Grecia2607"; // Contraseña de tu red Wi-Fi
+const char* ssid = "Luna 2.4"; 
+const char* password = "Grecia2607"; 
 
-// Configuración del Broker MQTT
-const char* mqtt_server = "broker.hivemq.com"; // Broker público
-const int mqtt_port = 1883; // Puerto MQTT
+const char* mqtt_server = "broker.hivemq.com"; 
+const int mqtt_port = 1883; 
 
-// Pin para controlar el motor háptico
 const int motorPin = D5; // Pin GPIO 14 (D5)
 
 WiFiClient espClient;
@@ -43,13 +40,12 @@ void callback(char* topic, byte* payload, unsigned int length) {
   }
   Serial.println();
 
-  // Controlar el motor háptico
   if (strcmp(topic, "casa/motor") == 0) {
     if ((char)payload[0] == '1') {
-      digitalWrite(motorPin, HIGH); // Encender motor
+      digitalWrite(motorPin, HIGH); 
       Serial.println("Motor ON");
     } else if ((char)payload[0] == '0') {
-      digitalWrite(motorPin, LOW); // Apagar motor
+      digitalWrite(motorPin, LOW); 
       Serial.println("Motor OFF");
     }
   }
@@ -60,7 +56,7 @@ void reconnect() {
     Serial.print("Intentando conexión MQTT...");
     if (client.connect("NodeMCUClient")) {
       Serial.println("Conectado");
-      client.subscribe("casa/motor"); // Suscríbete al tema del motor
+      client.subscribe("casa/motor"); 
     } else {
       Serial.print("Error, rc=");
       Serial.print(client.state());
@@ -72,7 +68,7 @@ void reconnect() {
 
 void setup() {
   pinMode(motorPin, OUTPUT);
-  digitalWrite(motorPin, LOW); // Inicia con el motor apagado
+  digitalWrite(motorPin, LOW); 
   Serial.begin(115200);
   setup_wifi();
   client.setServer(mqtt_server, mqtt_port);
