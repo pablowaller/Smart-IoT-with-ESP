@@ -1,13 +1,13 @@
 #include <ESP8266WiFi.h>
 #include <ArduinoJson.h>
-#include <HTTPClient.h>
+#include <ESP8266HTTPClient.h>  
 
 #define WIFI_SSID "Luna 2.4"
 #define WIFI_PASSWORD "Grecia2607"
 
 #define FIREBASE_URL "https://sense-bell-default-rtdb.firebaseio.com/doorbell.json"
 
-#define HAPTIC_MOTOR_PIN 14  // D5 en NodeMCU
+#define HAPTIC_MOTOR_PIN 14 
 
 void setup() {
     Serial.begin(115200);
@@ -34,8 +34,9 @@ void loop() {
 }
 
 void checkDoorbellStatus() {
-    HTTPClient http;
-    http.begin(FIREBASE_URL);
+    HTTPClient http; 
+    WiFiClient client;
+    http.begin(client, FIREBASE_URL);
     http.addHeader("Content-Type", "application/json");
 
     int httpResponseCode = http.GET();
@@ -67,8 +68,8 @@ void checkDoorbellStatus() {
 
 void activateHapticMotor() {
     Serial.println("🎚️ Activando motor háptico...");
-    digitalWrite(HAPTIC_MOTOR_PIN, HIGH);  
+    digitalWrite(HAPTIC_MOTOR_PIN, HIGH); 
     delay(500); 
-    digitalWrite(HAPTIC_MOTOR_PIN, LOW);   
+    digitalWrite(HAPTIC_MOTOR_PIN, LOW);  
     Serial.println("🎚️ Motor háptico desactivado.");
 }
