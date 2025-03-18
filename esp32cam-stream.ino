@@ -174,8 +174,6 @@ void setup() {
     Serial.println("Conectando a WiFi...");
   }
   Serial.println("Conectado a WiFi");
-  Serial.print("Dirección IP: ");
-  Serial.println(WiFi.localIP());
 
   timeClient.begin();
   timeClient.update(); 
@@ -185,7 +183,10 @@ void setup() {
   server.on("/stream", HTTP_GET, handleStream);
 
   server.begin();
-  Serial.println("Servidor iniciado");
+  Serial.println("Servidor iniciado en:");
+  Serial.print("🔗 http://");
+  Serial.print(WiFi.localIP());
+  Serial.println("/stream");
 }
 
 void loop() {
@@ -196,7 +197,12 @@ void loop() {
   if (currentDoorbellState != previousDoorbellState) {
     if (currentDoorbellState) {
       Serial.println("🔔 Botón presionado!");
-      sendDoorbellStatus(); // Enviar estado del timbre a Firebase
+      digitalWrite(FLASH_LED_PIN, HIGH);
+      sendDoorbellStatus(); 
+      delay(9000);  
+    }
+    else {
+      digitalWrite(FLASH_LED_PIN, LOW);
     }
     previousDoorbellState = currentDoorbellState;
     delay(1000);
