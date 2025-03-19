@@ -1,0 +1,76 @@
+#include <driver/i2s.h>
+
+// Configuración de pines I2S para INMP441
+#define PIN_I2S_BCLK 26  // SCK
+#define PIN_I2S_LRC 22   // WS
+#define PIN_I2S_DIN 35   // SD
+
+// Tasa de muestreo
+#define SAMPLE_RATE 16000
+
+// Tamaño del búfer de audio
+#define BUFFER_SIZE 1024
+
+// Inicialización del I2S
+void setupI2S() {
+    i2s_config_t i2s_config = {
+        .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX),
+        .sample_rate = SAMPLE_RATE,
+        .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT,  // INMP441 usa 24 bits, pero 32 también funciona
+        .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,   // Solo canal izquierdo (L/R conectado a GND)
+        .communication_format = I2S_COMM_FORMAT_I2S,
+        .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
+        .dma_buf_count = 8,
+        .dma_buf_len = BUFFER_SIZE
+    };
+
+    i2s_pin_config_t pin_config = {
+        .bck_io_num = PIN_I2S_BCLK,
+        .ws_io_num = PIN_I2S_LRC,
+        .data_out_num = I2S_PIN_NO_CHANGE,
+        .data_in_num = PIN_I2S_DIN
+    };
+
+    // Instalar y configurar el driver I2S
+    i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL);
+    i2s_set_pin(I2S_NUM_0, &pin_config);
+    i2s_set_clk(I2S_NUM_0, SAMPLE_RATE, I2S_BITS_PER_SAMPLE_32BIT, I2S_CHANNEL_MONO);
+}
+
+void setup() {
+    Serial.begin(115200);
+    delay(1000);
+
+    Serial.println("Iniciando prueba de micrófono INMP441...");
+    setupI2S();
+}
+
+void loop() {
+    uint8_t raw_buffer[BUFFER_SIZE * 4];  // Búfer para almacenar datos brutos (32 bits por muestra)
+    size_t bytes_read;
+
+    // Leer datos del micrófono
+    esp_err_t result = i2s_read(I2S_NUM_0, raw_buffer, sizeof(raw_buffer), &bytes_read, portMAX_DELAY);
+
+    if (result == ESP_OK) {
+        // Convertir los datos brutos a valores de 24 bits
+        int32_t* samples = (int32_t*)raw_buffer;
+        for (int i = 0; i < bytes_read / 4; i++) {  // 4 bytes por muestra (32 bits)
+            int32_t sample = samples[i];
+
+            // Ajustar el valor de 24 bits (eliminar los 8 bits superiores)
+            sample = sample >> 8;  // Desplazar 8 bits a la derecha para obtener un valor de 24 bits
+
+            // Normalizar el valor a un rango más manejable (opcional)
+            sample = sample / 256;  // Ajustar la escala para facilitar la visualización
+
+            // Mostrar el valor en el Serial Monitor
+            Serial.println(sample);
+        }
+        Serial.println("-----");  // Separador para mejor visualización
+    } else {
+        Serial.println("Error al leer datos del micrófono");
+    }
+
+    delay(100);  // Pequeña pausa para no saturar el Serial Monitor
+}
