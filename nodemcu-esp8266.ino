@@ -5,7 +5,8 @@
 #define WIFI_SSID "Luna 2.4"
 #define WIFI_PASSWORD "Grecia2607"
 
-#define FIREBASE_URL "https://sense-bell-default-rtdb.firebaseio.com/doorbell.json"
+#define DOORBELL_URL "https://sense-bell-default-rtdb.firebaseio.com/doorbell.json"
+#define VISITORS_URL "https://sense-bell-default-rtdb.firebaseio.com/visitors.json"
 
 #define HAPTIC_MOTOR_PIN 14 
 
@@ -27,6 +28,7 @@ void setup() {
 void loop() {
     if (WiFi.status() == WL_CONNECTED) {
         checkDoorbellStatus();
+        hapticFeedbackPatterns();
     } else {
         Serial.println("❌ No hay conexión WiFi.");
     }
@@ -36,7 +38,7 @@ void loop() {
 void checkDoorbellStatus() {
     HTTPClient http; 
     WiFiClient client;
-    http.begin(client, FIREBASE_URL);
+    http.begin(client, DOORBELL_URL);
     http.addHeader("Content-Type", "application/json");
 
     int httpResponseCode = http.GET();
@@ -72,4 +74,71 @@ void activateHapticMotor() {
     delay(500); 
     digitalWrite(HAPTIC_MOTOR_PIN, LOW);  
     Serial.println("🎚️ Motor háptico desactivado.");
+}
+
+void hapticFeedbackPatterns() {
+    HTTPClient http;
+    WiFiClient client;
+    http.begin(client, VISITORS_URL);
+    http.addHeader("Content-Type", "application/json");
+
+    int httpResponseCode = http.GET();
+    if (httpResponseCode == 200) {
+        String payload = http.getString();
+        payload.trim();
+
+        StaticJsonDocument<500> doc;
+        DeserializationError error = deserializeJson(doc, payload);
+
+        if (!error) {
+            if (doc.containsKey("priority")) {  
+                String priority = doc["priority"].as<String>();
+
+                Serial.println("Prioridad: " + priority);
+
+                if (priority == "high") {
+                    maximumPriority();
+                } else if (priority == "medium") {
+                    mediumPriority();
+                } else {
+                    minimumPriority();
+                }
+            } else {
+                Serial.println("⚠️ No se encontró el campo 'priority' en JSON.");
+            }
+        } else {
+            Serial.println("❌ Error al parsear JSON: " + String(error.c_str()));
+        }
+    } else {
+        Serial.printf("❌ Error al obtener datos: %d\n", httpResponseCode);
+    }
+
+    http.end();
+}
+
+void maximumPriority() {
+    Serial.println("⚡ Vibración máxima");
+    for (int i = 0; i < 5; i++) {
+        digitalWrite(HAPTIC_MOTOR_PIN, HIGH);
+        delay(100);  
+        digitalWrite(HAPTIC_MOTOR_PIN, LOW);
+        delay(50);
+    }
+}
+
+void mediumPriority() {
+    Serial.println("📳 Vibración media");
+    for (int i = 0; i < 3; i++) {
+        digitalWrite(HAPTIC_MOTOR_PIN, HIGH);
+        delay(300);  
+        digitalWrite(HAPTIC_MOTOR_PIN, LOW);
+        delay(200);
+    }
+}
+
+void minimumPriority() {
+    Serial.println("💤 Vibración mínima");
+    digitalWrite(HAPTIC_MOTOR_PIN, HIGH);
+    delay(700);
+    digitalWrite(HAPTIC_MOTOR_PIN, LOW);
 }
