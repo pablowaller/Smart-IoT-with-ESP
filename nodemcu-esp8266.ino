@@ -6,7 +6,7 @@
 #define WIFI_PASSWORD "Grecia2607"
 
 #define DOORBELL_URL "https://sense-bell-default-rtdb.firebaseio.com/doorbell.json"
-#define VISITORS_URL "https://sense-bell-default-rtdb.firebaseio.com/visitors.json"
+#define ATTENDANCE_URL "https://sense-bell-default-rtdb.firebaseio.com/attendance.json"  
 
 #define HAPTIC_MOTOR_PIN 14 
 
@@ -15,7 +15,7 @@ void setup() {
 
     pinMode(HAPTIC_MOTOR_PIN, OUTPUT);
     digitalWrite(HAPTIC_MOTOR_PIN, LOW);  
-
+    WiFi.disconnect(true);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     Serial.print("Conectando a WiFi");
     while (WiFi.status() != WL_CONNECTED) {
@@ -40,6 +40,7 @@ void checkDoorbellStatus() {
     WiFiClient client;
     http.begin(client, DOORBELL_URL);
     http.addHeader("Content-Type", "application/json");
+    http.setUserAgent("ESP8266");
 
     int httpResponseCode = http.GET();
     if (httpResponseCode == 200) {
@@ -62,7 +63,7 @@ void checkDoorbellStatus() {
             Serial.println("❌ Error al parsear JSON: " + String(error.c_str()));
         }
     } else {
-        Serial.printf("❌ Error al obtener datos: %d\n", httpResponseCode);
+        Serial.printf("❌ Error al obtener datos del timbre: %d\n", httpResponseCode);
     }
 
     http.end();
@@ -79,7 +80,7 @@ void activateHapticMotor() {
 void hapticFeedbackPatterns() {
     HTTPClient http;
     WiFiClient client;
-    http.begin(client, VISITORS_URL);
+    http.begin(client, ATTENDANCE_URL);  // 🔄 URL cambiada
     http.addHeader("Content-Type", "application/json");
 
     int httpResponseCode = http.GET();
@@ -110,7 +111,7 @@ void hapticFeedbackPatterns() {
             Serial.println("❌ Error al parsear JSON: " + String(error.c_str()));
         }
     } else {
-        Serial.printf("❌ Error al obtener datos: %d\n", httpResponseCode);
+        Serial.printf("❌ Error al obtener los visitantes: %d\n", httpResponseCode);
     }
 
     http.end();
