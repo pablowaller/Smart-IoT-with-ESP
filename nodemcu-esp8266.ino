@@ -117,29 +117,43 @@ void hapticFeedbackPatterns() {
     http.end();
 }
 
+
+
 void maximumPriority() {
-  Serial.println("💤 Vibración larga (700ms)");
-  digitalWrite(HAPTIC_MOTOR_PIN, HIGH);
-  delay(700);
-  digitalWrite(HAPTIC_MOTOR_PIN, LOW);  
+  
+  Serial.println("\n🟢 Prioridad ALTA...");
+
+  for (int i = 0; i < 5; i++) {
+    digitalWrite(HAPTIC_MOTOR_PIN, HIGH);
+    delay(700);
+    digitalWrite(HAPTIC_MOTOR_PIN, LOW);
+
+    if (i < 2) {
+      delay(250);
+    }
+  }
 }
 
 void mediumPriority() {
-  Serial.println("📳 3 vibraciones medias (300ms ON/200ms OFF)");
-  for (int i = 0; i < 3; i++) {
+
+  Serial.println("\n🟡 Prioridad MEDIA...");
+
+  for (int i = 0; i < 5; i++) {
     digitalWrite(HAPTIC_MOTOR_PIN, HIGH);
-    delay(300);
+    delay(350);
     digitalWrite(HAPTIC_MOTOR_PIN, LOW);
     delay(200);
   }
 }
 
 void minimumPriority() {
-  Serial.println("⚡ 5 vibraciones rápidas (100ms ON/50ms OFF)");
+
+  Serial.println("\n🔴 Prioridad BAJA...");
+
   for (int i = 0; i < 5; i++) {
     digitalWrite(HAPTIC_MOTOR_PIN, HIGH);
-    delay(100);
+    delay(200);
     digitalWrite(HAPTIC_MOTOR_PIN, LOW);
-    delay(50);
+    delay(100);
   }
 }
