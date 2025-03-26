@@ -5,28 +5,32 @@
 #include <ArduinoJson.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
+#include <esp32cam.h>
 
-const char* ssid = "Luna 2.4";
-const char* password = "Grecia2607";
+const char* ssid = "Luna 2.4"; //IES 21 - Aula 5.1 5.2
+const char* password = "Grecia2607"; // ies21368
 
 WebServer server(80);
 
-#define FLASH_LED_PIN 4
-#define DOORBELL 13  
+#define DOORBELL 13
+#define MAX_CLIENTS 4
 
-const char* FIREBASE_URL = "https://sense-bell-default-rtdb.firebaseio.com/flash.json";
 const char* DOORBELL_URL = "https://sense-bell-default-rtdb.firebaseio.com/doorbell.json";
+const char* FLASH_URL = "https://sense-bell-default-rtdb.firebaseio.com/flash.json";
+const char* IP_URL = "https://sense-bell-default-rtdb.firebaseio.com/currentIP.json";
 
-bool previousFlashState = false;
-bool previousDoorbellState = false;  
+bool previousDoorbellState = false;
 unsigned long lastFirebaseCheck = 0;
 unsigned long lastReconnectAttempt = 0;
 const unsigned long firebaseCheckInterval = 1000;
 const unsigned long reconnectInterval = 10000;
 
-// Configuración del NTP
+bool initialized = false;
+bool lastFlashState = false;
+const int LED_FLASH = 4; 
+
 WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "pool.ntp.org", -3 * 3600, 60000); // Ajusta el offset para Argentina (-3 horas)
+NTPClient timeClient(ntpUDP, "pool.ntp.org", -3 * 3600, 60000);
 
 void configCamera() {
   camera_config_t config;
@@ -57,12 +61,25 @@ void configCamera() {
 
   if (esp_camera_init(&config) != ESP_OK) {
     Serial.println("Error al inicializar la cámara");
-    while (true);
+  } else {
+    initialized = true;
   }
 }
 
+WiFiClient clients[MAX_CLIENTS];
+
 void handleStream() {
   WiFiClient client = server.client();
+
+  if (client) {
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+      if (!clients[i]) {
+        clients[i] = client;
+        break;
+      }
+    }
+  }
+
   camera_fb_t* fb = NULL;
   String boundary = "frame";
   String response = "HTTP/1.1 200 OK\r\n" + String("Content-Type: multipart/x-mixed-replace; boundary=") + boundary + "\r\n\r\n";
@@ -84,52 +101,58 @@ void handleStream() {
   }
 }
 
+static auto hiRes = esp32cam::Resolution::find(640, 480);
+
 void checkFirebaseStatus() {
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("❌ No hay conexión WiFi.");
     return;
   }
 
-  HTTPClient http;
-  http.begin(FIREBASE_URL);
-  http.addHeader("Content-Type", "application/json");
+  // Verificación del flash (prioritaria)
+  HTTPClient httpFlash;
+  httpFlash.begin(FLASH_URL);
+  httpFlash.addHeader("Content-Type", "application/json");
+  httpFlash.setTimeout(1000);
 
-  int httpResponseCode = http.GET();
-  if (httpResponseCode == 200) {
-    String payload = http.getString();
+  int httpResponseCodeFlash = httpFlash.GET();
+  if (httpResponseCodeFlash == 200) {
+    String payload = httpFlash.getString();
     payload.trim();
 
-    StaticJsonDocument<200> doc;
-    DeserializationError error = deserializeJson(doc, payload);
+    if (payload.length() > 0 && payload != "null") {
+      StaticJsonDocument<200> doc;
+      DeserializationError error = deserializeJson(doc, payload);
 
-    if (!error) {
-      bool currentFlashState = doc["pressed"];  
-      if (currentFlashState != previousFlashState) {
-        digitalWrite(FLASH_LED_PIN, currentFlashState ? HIGH : LOW);
-        Serial.println(currentFlashState ? "🔔 LED ENCENDIDO" : "🔕 LED APAGADO");
-        previousFlashState = currentFlashState;
+      if (!error) {
+        bool currentFlashState = doc["enabled"];
+        
+        if (currentFlashState != lastFlashState) {
+          Serial.println(currentFlashState ? "📸 Flash activado" : "🌑 Flash desactivado");
+          digitalWrite(LED_FLASH, currentFlashState ? HIGH : LOW);
+          lastFlashState = currentFlashState;
+        }
+      } else {
+        Serial.println("❌ Error al parsear JSON de flash: " + String(error.c_str()));
       }
-    } else {
-      Serial.println("❌ Error al parsear JSON: " + String(error.c_str()));
     }
   } else {
-    Serial.printf("❌ Error al obtener datos: %d\n", httpResponseCode);
+    Serial.printf("❌ Error al obtener estado del flash: %d\n", httpResponseCodeFlash);
   }
-
-  http.end();
+  httpFlash.end();
 }
 
 String getFormattedDateTime() {
-  timeClient.update(); 
+  timeClient.update();
   unsigned long epochTime = timeClient.getEpochTime();
 
-  if (epochTime < 1609459200) { 
+  if (epochTime < 1609459200) {
     Serial.println("❌ Tiempo no válido. Verifica la conexión a Internet.");
     return "Fecha no disponible";
   }
 
   time_t rawTime = (time_t)epochTime;
-  struct tm *ptm = gmtime(&rawTime);
+  struct tm* ptm = gmtime(&rawTime);
 
   char buffer[30];
   sprintf(buffer, "%02d/%02d/%04d %02d:%02d:%02d", ptm->tm_mday, ptm->tm_mon + 1, ptm->tm_year + 1900, ptm->tm_hour, ptm->tm_min, ptm->tm_sec);
@@ -143,7 +166,7 @@ void sendDoorbellStatus() {
   }
 
   HTTPClient http;
-  http.begin(DOORBELL_URL); // Usar la ruta base "doorbell"
+  http.begin(DOORBELL_URL);
   http.addHeader("Content-Type", "application/json");
 
   String formattedDateTime = getFormattedDateTime();
@@ -164,30 +187,51 @@ void sendDoorbellStatus() {
 void setup() {
   Serial.begin(115200);
   setCpuFrequencyMhz(240);
-
-  pinMode(FLASH_LED_PIN, OUTPUT);
-  pinMode(DOORBELL, INPUT_PULLUP);  
-
+  pinMode(DOORBELL, INPUT_PULLUP);
+  pinMode(LED_FLASH, OUTPUT);
+  digitalWrite(LED_FLASH, LOW);
+  lastFlashState = false; // Asegurar estado inicial
+  
+  WiFi.disconnect(true);  
+  delay(1000);
   WiFi.begin(ssid, password);
+  
   while (WiFi.status() != WL_CONNECTED) {
     delay(1000);
     Serial.println("Conectando a WiFi...");
   }
+  
   Serial.println("Conectado a WiFi");
-
   timeClient.begin();
-  timeClient.update(); 
-
+  timeClient.update();
   configCamera();
-
+  
   server.on("/stream", HTTP_GET, handleStream);
-
   server.begin();
+  
   Serial.println("Servidor iniciado en:");
   Serial.print("🔗 http://");
   Serial.print(WiFi.localIP());
   Serial.println("/stream");
+  Serial.println("  /cam-hi.jpg");
+
+  HTTPClient httpInit;
+  httpInit.begin(FLASH_URL);
+  httpInit.addHeader("Content-Type", "application/json");
+  String flashPayload = "{\"enabled\": false}";
+  httpInit.PUT(flashPayload);
+  httpInit.end();
+
+  HTTPClient httpIP;
+  httpIP.begin(IP_URL);
+  httpIP.addHeader("Content-Type", "application/json");
+  String ipPayload = "{\"ip\":\"" + WiFi.localIP().toString() + "\"}";
+  httpIP.PUT(ipPayload);
+  httpIP.end();
 }
+
+unsigned long lastIPCheck = 0;
+const unsigned long ipCheckInterval = 60000;
 
 void loop() {
   server.handleClient();
@@ -197,12 +241,8 @@ void loop() {
   if (currentDoorbellState != previousDoorbellState) {
     if (currentDoorbellState) {
       Serial.println("🔔 Botón presionado!");
-      digitalWrite(FLASH_LED_PIN, HIGH);
-      sendDoorbellStatus(); 
-      delay(9000);  
-    }
-    else {
-      digitalWrite(FLASH_LED_PIN, LOW);
+      sendDoorbellStatus();
+      delay(9000);
     }
     previousDoorbellState = currentDoorbellState;
     delay(1000);
@@ -221,5 +261,15 @@ void loop() {
       WiFi.reconnect();
       lastReconnectAttempt = currentMillis;
     }
+  }
+
+  if (currentMillis - lastIPCheck >= ipCheckInterval) {
+    HTTPClient http;
+    http.begin(IP_URL);
+    http.addHeader("Content-Type", "application/json");
+    String ipPayload = "{\"ip\":\"" + WiFi.localIP().toString() + "\"}";
+    http.PUT(ipPayload);
+    http.end();
+    lastIPCheck = currentMillis;
   }
 }
