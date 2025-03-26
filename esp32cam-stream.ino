@@ -213,7 +213,6 @@ void setup() {
   Serial.print("🔗 http://");
   Serial.print(WiFi.localIP());
   Serial.println("/stream");
-  Serial.println("  /cam-hi.jpg");
 
   HTTPClient httpInit;
   httpInit.begin(FLASH_URL);
