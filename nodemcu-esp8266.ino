@@ -1,14 +1,12 @@
 #include <ESP8266WiFi.h>
 #include <Firebase_ESP_Client.h>
 
-// Definiciones
 #define WIFI_SSID "iPhone"
 #define WIFI_PASSWORD "tarantula"
 #define FIREBASE_HOST "sense-bell-default-rtdb.firebaseio.com"
 #define FIREBASE_AUTH "lZ5hOsyDNVMex6IibzuiLZEToIsFeOC70ths5los"
 #define HAPTIC_MOTOR_PIN 14
 
-// Variables globales
 FirebaseData fbdo;
 FirebaseAuth auth;
 FirebaseConfig config;
@@ -16,7 +14,6 @@ const char doorbellPath[] = "/doorbell";
 unsigned long lastVibrationTime = 0;
 const unsigned long VIBRATION_COOLDOWN = 10000;
 
-// Prototipos de funciones
 void connectWiFi();
 void setupFirebase();
 void checkConnection();
@@ -106,14 +103,12 @@ void streamCallback(FirebaseStream data) {
     FirebaseJson json = data.jsonObject();
     FirebaseJsonData jsonData;
 
-    // Verificar si el timbre fue presionado
     json.get(jsonData, "pressed");
     if (jsonData.success && jsonData.boolValue) {
       Serial.println("🔔 Timbre presionado detectado");
       activateVibration();  // Cambiado de simpleVibration a activateVibration
     }
 
-    // Verificar prioridades
     bool priorityLow = false, priorityMedium = false, priorityHigh = false;
 
     json.get(jsonData, "priority_low");
@@ -174,7 +169,6 @@ void maximumPriority() {
 }
 
 void mediumPriority() {
-  Serial.println("\n🟡 Prioridad MEDIA...");
   for (int i = 0; i < 5; i++) {
     digitalWrite(HAPTIC_MOTOR_PIN, HIGH);
     delay(350);
@@ -184,7 +178,6 @@ void mediumPriority() {
 }
 
 void minimumPriority() {
-  Serial.println("\n🔴 Prioridad BAJA...");
   for (int i = 0; i < 5; i++) {
     digitalWrite(HAPTIC_MOTOR_PIN, HIGH);
     delay(200);
