@@ -2,8 +2,8 @@
 #include <Firebase_ESP_Client.h>
 
 // Configuración de red y Firebase
-#define WIFI_SSID "iPhone"
-#define WIFI_PASSWORD "tarantula"
+#define WIFI_SSID "Luna 2.4"
+#define WIFI_PASSWORD "Grecia2607"
 #define FIREBASE_HOST "sense-bell-default-rtdb.firebaseio.com"
 #define FIREBASE_AUTH "lZ5hOsyDNVMex6IibzuiLZEToIsFeOC70ths5los"
 #define HAPTIC_MOTOR_PIN 14
