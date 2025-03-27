@@ -151,16 +151,13 @@ void streamCallback(FirebaseStream data) {
     // Verificar prioridades
     bool priorityHigh = false;
     if (json.get(jsonData, "priority_high") && jsonData.boolValue) {
-      Serial.println("⚠️ Alta prioridad detectada");
       maximumPriority();
       priorityHigh = true;
     }
 
     if (!priorityHigh && json.get(jsonData, "priority_medium") && jsonData.boolValue) {
-      Serial.println("🟡 Prioridad media detectada");
       mediumPriority();
     } else if (json.get(jsonData, "priority_low") && jsonData.boolValue) {
-      Serial.println("🔴 Prioridad baja detectada");
       minimumPriority();
     }
 
@@ -184,7 +181,6 @@ void streamTimeoutCallback(bool timeout) {
 
 void activateVibration(unsigned long duration) {
   if (vibrationState == IDLE) {
-    Serial.println("🔔 Activando vibración");
     digitalWrite(HAPTIC_MOTOR_PIN, HIGH);
     vibrationStartTime = millis();
     vibrationDuration = duration;
@@ -196,11 +192,11 @@ void handleVibration() {
   if (vibrationState == VIBRATING && millis() - vibrationStartTime >= vibrationDuration) {
     digitalWrite(HAPTIC_MOTOR_PIN, LOW);
     vibrationState = IDLE;
-    Serial.println("✅ Vibración completada");
   }
 }
 
 void maximumPriority() {
+  Serial.println("🔴 Alta prioridad detectada");
   for (int i = 0; i < 5; i++) {
     activateVibration(700);
     while (vibrationState == VIBRATING) {
@@ -215,6 +211,7 @@ void maximumPriority() {
 }
 
 void mediumPriority() {
+  Serial.println("🟡 Prioridad media detectada");
   for (int i = 0; i < 5; i++) {
     activateVibration(350);
     while (vibrationState == VIBRATING) {
@@ -226,6 +223,7 @@ void mediumPriority() {
 }
 
 void minimumPriority() {
+  Serial.println("🟢 Prioridad baja detectada");
   for (int i = 0; i < 5; i++) {
     activateVibration(200);
     while (vibrationState == VIBRATING) {
@@ -242,12 +240,6 @@ void resetDoorbellStatus() {
   json.set("priority_low", false);
   json.set("priority_medium", false);
   json.set("priority_high", false);
-
-  if (Firebase.RTDB.setJSON(&fbdo, doorbellPath, &json)) {
-    Serial.println("Estados reiniciados correctamente");
-  } else {
-    Serial.println("Error al reiniciar estados: " + fbdo.errorReason());
-  }
 }
 
 void checkConnection() {
