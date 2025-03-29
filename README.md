@@ -28,4 +28,5 @@ This repository contains code for an IoT system that combines:
 **Wearable Device with Nodemcu ESP32/ESP8266 or WEMOS ESP99266 connections**
 
 ![example2](wearable-device.jpg)
+![example3](img.gif)
 
