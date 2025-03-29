@@ -19,4 +19,11 @@ This repository contains code for an IoT system that combines:
 - **NodeMCU ESP32** 📟 (to record audio)
 - **INMP441 I2S Omnidirectional Microphone** 🎙️
 - **Firebase** 🔥.  
-- **WiFi** 🌐 (to connect devices and services).  
+- **WiFi** 🌐 (to connect devices and services).
+
+**Smart Bell with ESP32 Cam connections**
+![example1](smart-bell.jpg)
+
+**Wearable Device with Nodemcu ESP32/ESP8266 or WEMOS ESP99266 connections**
+![example2](wearable-device.jpg)
+
