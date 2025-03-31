@@ -1,26 +1,38 @@
 #include <ESP8266WiFi.h>
-#include <Firebase_ESP_Client.h>
+#include <FirebaseESP8266.h>
 
-#define WIFI_SSID "iPhone"
-#define WIFI_PASSWORD "tarantula"
+const char* WIFI_SSID = "iPhone";
+const char* WIFI_PASSWORD = "tarantula";
+
 #define FIREBASE_HOST "sense-bell-default-rtdb.firebaseio.com"
 #define FIREBASE_AUTH "lZ5hOsyDNVMex6IibzuiLZEToIsFeOC70ths5los"
-#define HAPTIC_MOTOR_PIN 14
+#define HAPTIC_MOTOR_PIN D8
 
 FirebaseData fbdo;
 FirebaseAuth auth;
 FirebaseConfig config;
-const char doorbellPath[] = "/doorbell";
-unsigned long lastVibrationTime = 0;
-const unsigned long VIBRATION_COOLDOWN = 10000;
 
-void connectWiFi();
+const char doorbellPath[] = "/doorbell";
+const unsigned long VIBRATION_COOLDOWN = 10000;
+const unsigned long CONNECTION_CHECK_INTERVAL = 5000;
+const unsigned long MEMORY_CHECK_INTERVAL = 5000;
+const int CRITICAL_MEMORY = 6000;
+
+unsigned long lastVibrationTime = 0;
+unsigned long lastConnectionCheck = 0;
+unsigned long lastMemoryCheck = 0;
+
+enum VibrationState { IDLE, VIBRATING };
+VibrationState vibrationState = IDLE;
+unsigned long vibrationStartTime = 0;
+unsigned long vibrationDuration = 0;
+
+bool connectWiFi();
 void setupFirebase();
 void checkConnection();
-void streamCallback(FirebaseStream data);
-void streamTimeoutCallback(bool timeout);
-void activateVibration();
-void simpleVibration();
+void streamCallback(StreamData data);
+void activateVibration(unsigned long duration);
+void handleVibration();
 void maximumPriority();
 void mediumPriority();
 void minimumPriority();
@@ -29,105 +41,97 @@ void resetDoorbellStatus();
 void setup() {
   Serial.begin(115200);
   delay(1000);
+  
   Serial.println("\nIniciando sistema...");
 
   pinMode(HAPTIC_MOTOR_PIN, OUTPUT);
   digitalWrite(HAPTIC_MOTOR_PIN, LOW);
 
-  connectWiFi();
-  setupFirebase();
-
-  while (!Firebase.ready()) {
-    Serial.println("Esperando conexión Firebase...");
-    delay(1000);
-  }
-
-  if (!Firebase.RTDB.beginStream(&fbdo, doorbellPath)) {
-    Serial.println("❌ Error al configurar stream: " + fbdo.errorReason());
+  if (!connectWiFi()) {
+    Serial.println("❌ No se pudo conectar a la red, reiniciando...");
+    delay(2000);
     ESP.restart();
   }
-
-  Firebase.RTDB.setStreamCallback(&fbdo, streamCallback, streamTimeoutCallback);
+  
+  setupFirebase();
+  
+  if (!Firebase.beginStream(fbdo, doorbellPath)) {
+    Serial.println("❌ Error al configurar stream: " + fbdo.errorReason());
+    delay(2000);
+    ESP.restart();
+  }
+  
   Serial.println("✅ Stream conectado a /doorbell");
 }
 
 void loop() {
-  static unsigned long lastCheck = millis();
-  static unsigned long lastMemoryCheck = millis();
+  unsigned long currentMillis = millis();
 
-  if (millis() - lastMemoryCheck > 5000) {
-    lastMemoryCheck = millis();
+  if (currentMillis - lastMemoryCheck > MEMORY_CHECK_INTERVAL) {
+    lastMemoryCheck = currentMillis;
     Serial.printf("Memoria libre: %d bytes\n", ESP.getFreeHeap());
+    
+    if (ESP.getFreeHeap() < CRITICAL_MEMORY) {
+      Serial.println("⚠️ Memoria crítica, reiniciando...");
+      delay(1000);
+      ESP.restart();
+    }
   }
 
-  if (ESP.getFreeHeap() < 5000) {  
-    Serial.println("⚠️ Memoria crítica, reiniciando...");
-    ESP.restart();
-  }
-
-  if (millis() - lastCheck > 5000) {
-    lastCheck = millis();
+  if (currentMillis - lastConnectionCheck > CONNECTION_CHECK_INTERVAL) {
+    lastConnectionCheck = currentMillis;
     checkConnection();
   }
 
-  delay(500);
+  handleVibration();
+  delay(50);
 }
 
-void connectWiFi() {
-  Serial.println("\n📡 Conectando a WiFi...");
+bool connectWiFi() {
+  Serial.println("\n📡 Intentando conectar a red...");
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  WiFi.setAutoReconnect(true);
+  WiFi.persistent(true);
 
   unsigned long startTime = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - startTime < 30000) {
+  while (WiFi.status() != WL_CONNECTED && millis() - startTime < 20000) { 
     delay(500);
     Serial.print(".");
   }
 
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("\n❌ Fallo conexión WiFi");
-    ESP.restart();
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.printf("\n✅ Conectado a WiFi | RSSI: %d dBm\n", WiFi.RSSI());
+    return true;
   }
-
-  Serial.printf("\n📶 WiFi conectado | IP: %s\n", WiFi.localIP().toString().c_str());
+  
+  return false; 
 }
 
 void setupFirebase() {
   config.database_url = FIREBASE_HOST;
   config.signer.tokens.legacy_token = FIREBASE_AUTH;
   Firebase.begin(&config, &auth);
-  Firebase.reconnectNetwork(true);
+  Firebase.reconnectWiFi(true);
 }
 
-void streamCallback(FirebaseStream data) {
+void streamCallback(StreamData data) {
   if (data.dataType() == "json") {
     FirebaseJson json = data.jsonObject();
     FirebaseJsonData jsonData;
 
-    json.get(jsonData, "pressed");
-    if (jsonData.success && jsonData.boolValue) {
+    if (json.get(jsonData, "pressed") && jsonData.boolValue) {
       Serial.println("🔔 Timbre presionado detectado");
-      activateVibration();  // Cambiado de simpleVibration a activateVibration
+      activateVibration(6000);
     }
 
-    bool priorityLow = false, priorityMedium = false, priorityHigh = false;
-
-    json.get(jsonData, "priority_low");
-    if (jsonData.success) priorityLow = jsonData.boolValue;
-
-    json.get(jsonData, "priority_medium");
-    if (jsonData.success) priorityMedium = jsonData.boolValue;
-
-    json.get(jsonData, "priority_high");
-    if (jsonData.success) priorityHigh = jsonData.boolValue;
-
-    if (priorityHigh) {
-      Serial.println("⚠️ Alta prioridad detectada");
+    bool priorityHigh = false;
+    if (json.get(jsonData, "priority_high") && jsonData.boolValue) {
       maximumPriority();
-    } else if (priorityMedium) {
-      Serial.println("🟡 Prioridad media detectada");
+      priorityHigh = true;
+    }
+    if (!priorityHigh && json.get(jsonData, "priority_medium") && jsonData.boolValue) {
       mediumPriority();
-    } else if (priorityLow) {
-      Serial.println("🔴 Prioridad baja detectada");
+    } else if (json.get(jsonData, "priority_low") && jsonData.boolValue) {
       minimumPriority();
     }
 
@@ -136,32 +140,30 @@ void streamCallback(FirebaseStream data) {
   }
 }
 
-void streamTimeoutCallback(bool timeout) {
-  if (timeout) {
-    Serial.println("⚠️ Stream timeout, reconectando...");
-    Firebase.RTDB.beginStream(&fbdo, doorbellPath);
+void activateVibration(unsigned long duration) {
+  if (vibrationState == IDLE) {
+    digitalWrite(HAPTIC_MOTOR_PIN, HIGH);
+    vibrationStartTime = millis();
+    vibrationDuration = duration;
+    vibrationState = VIBRATING;
   }
 }
 
-void activateVibration() {
-  Serial.println("🔔 Alguien presionó el timbre! Activando vibración");
-  digitalWrite(HAPTIC_MOTOR_PIN, HIGH);
-  delay(6000);
-  digitalWrite(HAPTIC_MOTOR_PIN, LOW);
-}
-
-void simpleVibration() {
-  Serial.println("🔔 Activando vibración simple");
-  digitalWrite(HAPTIC_MOTOR_PIN, HIGH);
-  delay(500);
-  digitalWrite(HAPTIC_MOTOR_PIN, LOW);
+void handleVibration() {
+  if (vibrationState == VIBRATING && millis() - vibrationStartTime >= vibrationDuration) {
+    digitalWrite(HAPTIC_MOTOR_PIN, LOW);
+    vibrationState = IDLE;
+  }
 }
 
 void maximumPriority() {
+  Serial.println("🔴 Alta prioridad detectada");
   for (int i = 0; i < 5; i++) {
-    digitalWrite(HAPTIC_MOTOR_PIN, HIGH);
-    delay(700);
-    digitalWrite(HAPTIC_MOTOR_PIN, LOW);
+    activateVibration(700);
+    while (vibrationState == VIBRATING) {
+      handleVibration();
+      delay(10);
+    }
     if (i < 2) {
       delay(250);
     }
@@ -169,19 +171,25 @@ void maximumPriority() {
 }
 
 void mediumPriority() {
+  Serial.println("🟡 Prioridad media detectada");
   for (int i = 0; i < 5; i++) {
-    digitalWrite(HAPTIC_MOTOR_PIN, HIGH);
-    delay(350);
-    digitalWrite(HAPTIC_MOTOR_PIN, LOW);
+    activateVibration(350);
+    while (vibrationState == VIBRATING) {
+      handleVibration();
+      delay(10);
+    }
     delay(200);
   }
 }
 
 void minimumPriority() {
+  Serial.println("🟢 Prioridad baja detectada");
   for (int i = 0; i < 5; i++) {
-    digitalWrite(HAPTIC_MOTOR_PIN, HIGH);
-    delay(200);
-    digitalWrite(HAPTIC_MOTOR_PIN, LOW);
+    activateVibration(200);
+    while (vibrationState == VIBRATING) {
+      handleVibration();
+      delay(10);
+    }
     delay(100);
   }
 }
@@ -192,18 +200,17 @@ void resetDoorbellStatus() {
   json.set("priority_low", false);
   json.set("priority_medium", false);
   json.set("priority_high", false);
-
-  if (Firebase.RTDB.setJSON(&fbdo, doorbellPath, &json)) {
-    Serial.println("Estados reiniciados correctamente");
-  } else {
-    Serial.println("Error al reiniciar estados: " + fbdo.errorReason());
-  }
+  Firebase.updateNode(fbdo, doorbellPath, json);
 }
 
 void checkConnection() {
   if (!Firebase.ready() || WiFi.status() != WL_CONNECTED) {
-    Serial.println("⚠️ Problema de conexión, reiniciando...");
-    delay(1000);
-    ESP.restart();
+    Serial.println("⚠️ Problema de conexión, intentando reconectar...");
+    if (!connectWiFi()) {
+      Serial.println("❌ No se pudo reconectar, reiniciando...");
+      delay(1000);
+      ESP.restart();
+    }
+    setupFirebase();
   }
 }
