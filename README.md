@@ -10,7 +10,8 @@ This repository contains code for an IoT system that combines:
 ✅ **Built-in web server** to display video in a browser and then stream it on a mobile app.  
 ✅ **Flash LED control** to improve low-light streaming.  
 ✅ **Audio recording with Mems INMP441 Microphone**
-✅ **Receive notifications** on ESP8266 via **Firebase Real Time Database (FRTDB)**.  
+✅ **MQTT (Message Queuing Telemetry Transport)** for commmunication among IoT devices
+✅ **Receive notifications** on ESP8266 and ESP32 via **Firebase Real Time Database (FRTDB)**.
 ✅ **Compatible with mobile apps** using WebView to display the video feed.  
 
 ## 🛠️ Technologies and Hardware  
